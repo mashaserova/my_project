@@ -1,10 +1,20 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic_core.core_schema import int_schema
 
-from my_project.schemas import StatusResponse, User, UserResponse
+from my_project.schemas import StatusResponse, UserCreate, UserResponse
 from my_project.schemas import Pet, PetResponse
 
+from my_project.models import User
+from my_project.services import UserService
+
 router = APIRouter()
+
+def get_user_service(request: Request)-> UserService:
+    return request.app.state.user_service
+
+type UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
 users_database = dict[str, User]()
 petsID_database: dict[int, Pet] = dict[int, Pet]()
@@ -16,17 +26,13 @@ def get_status() -> StatusResponse:
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
-def signup(user: User):
-    if user.login in users_database:
-        raise HTTPException(status.HTTP_409_CONFLICT)
-    users_database[user.login] = user
+async def signup(user: UserCreate, user_service: UserServiceDep):
+    await user_service.signup(user)
 
 
 @router.get("/users/{login}")
-def get_user(login: str) -> UserResponse:
-    if login not in users_database:
-        raise HTTPException(status.HTTP_404_NOT_FOUND)
-    user = users_database[login]
+async def get_user_by_id(id: int, user_service: UserServiceDep) -> UserResponse:
+    user = await user_service.get_by_id(id)
     return UserResponse(
         name=user.name,
         email=user.email,
