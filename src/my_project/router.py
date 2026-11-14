@@ -1,23 +1,26 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic_core.core_schema import int_schema
+from fastapi import APIRouter, Depends, Request, status
 
-from my_project.schemas import StatusResponse, UserCreate, UserResponse
-from my_project.schemas import Pet, PetResponse
-
-from my_project.models import User
-from my_project.services import UserService
+from my_project.models import User, Animal
+from my_project.schemas import (
+    StatusResponse, UserCreate, UserResponse, AnimalCreate, AnimalResponse
+)
+from my_project.services import UserService, AnimalService
 
 router = APIRouter()
 
-def get_user_service(request: Request)-> UserService:
+
+def get_user_service(request: Request) -> UserService:
     return request.app.state.user_service
 
-type UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
-users_database = dict[str, User]()
-petsID_database: dict[int, Pet] = dict[int, Pet]()
+def get_animal_service(request: Request) -> AnimalService:
+    return request.app.state.animal_service
+
+
+type UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+type AnimalServiceDep = Annotated[AnimalService, Depends(get_animal_service)]
 
 
 @router.get("/status")
@@ -25,42 +28,75 @@ def get_status() -> StatusResponse:
     return StatusResponse(status="ok")
 
 
+# --- USER ROUTES ---
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
-async def signup(user: UserCreate, user_service: UserServiceDep):
-    await user_service.signup(user)
+async def signup(user_data: UserCreate, user_service: UserServiceDep) -> dict[str, int | str]:
+    user = await user_service.signup(user_data)
+    return {"id": user.id, "message": "User created"}
 
 
-@router.get("/users/{login}")
+@router.get("/users")
+async def get_all_users(user_service: UserServiceDep) -> list[UserResponse]:
+    users = await user_service.get_all()
+    return [
+        UserResponse(
+            id=u.id,
+            login=u.login,
+            name=u.name,
+            email=u.email,
+            role=u.role
+        )
+        for u in users
+    ]
+
+
+@router.get("/users/{id}")
 async def get_user_by_id(id: int, user_service: UserServiceDep) -> UserResponse:
     user = await user_service.get_by_id(id)
     return UserResponse(
+        id=user.id,
+        login=user.login,
         name=user.name,
         email=user.email,
+        role=user.role
     )
 
 
-# дз: добавить метод создания id животного и получение этого id (добавить имя, описание и тд)
-# + метод возвращающий все данные обо всех животных
+@router.post("/animals", status_code=status.HTTP_201_CREATED)
+async def create_animal(
+    animal_data: AnimalCreate,
+    animal_service: AnimalServiceDep
+) -> dict[str, int | str]:
+    animal = await animal_service.create_animal(animal_data)
+    return {"id": animal.id, "message": "Animal created"}
 
 
-@router.post("/create_petID", status_code=status.HTTP_201_CREATED)
-def create_petID(pet: Pet) -> None:
-    if pet.id in petsID_database:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT)
-    petsID_database[pet.id] = pet
+@router.get("/animals/{id}")
+async def get_animal_by_id(
+    id: int,
+    animal_service: AnimalServiceDep
+) -> AnimalResponse:
+    animal = await animal_service.get_animal_by_id(id)
+    return AnimalResponse(
+        id=animal.id,
+        name=animal.name,
+        description=animal.description,
+        species=animal.species
+    )
 
 
-@router.get("/{id}/petID")
-def get_petID(id: int) -> PetResponse:
-    if id not in petsID_database:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    pet = petsID_database[id]
-    return PetResponse(name=pet.name, caption=pet.caption)
-
-
-@router.get("/pets")
-def get_all_pets() -> list[PetResponse]:
+@router.get("/animals")
+async def get_all_animals(
+    animal_service: AnimalServiceDep
+) -> list[AnimalResponse]:
+    animals = await animal_service.get_all_animals()
     return [
-        PetResponse(name=pet.name, caption=pet.caption)
-        for pet in petsID_database.values()
+        AnimalResponse(
+            id=a.id,
+            name=a.name,
+            description=a.description,
+            species=a.species
+        )
+        for a in animals
     ]

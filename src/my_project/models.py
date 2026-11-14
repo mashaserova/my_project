@@ -1,5 +1,4 @@
 from enum import StrEnum
-
 from pydantic import BaseModel
 
 
@@ -15,3 +14,10 @@ class User(BaseModel):
     role: UserRole
     email: str
     password: str
+
+
+class Animal(BaseModel):
+    id: int
+    name: str
+    description: str
+    species: str
